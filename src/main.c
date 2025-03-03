@@ -6,12 +6,19 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-const int low_threshold = 10;
-const int high_threshold = 100;
+const int low_threshold = 127;
+const int high_threshold = 223;
 
 int main (int argc, char *argv[]) {
+    if (argc < 2) {
+        printf("Usage: ./pixel-sorting <image.jpg>");
+        exit(1);
+    }
+
+    char *filename = argv[1];
+
     int width, height, channels;
-    unsigned char *img = stbi_load("../data/duck.jpg", &width, &height, &channels, 0);
+    unsigned char *img = stbi_load(filename, &width, &height, &channels, 0);
      if (img == NULL) {
         printf("Error in loading the image.\n");
         exit(1);
@@ -37,16 +44,17 @@ int main (int argc, char *argv[]) {
             unsigned char brightness = (r + g + b) / 3;
 
             if (brightness > low_threshold && brightness < high_threshold) {
-                mask_p[0] = 0;
-                mask_p[1] = 0;
-                mask_p[2] = 0;
-            }
-            else {
                 mask_p[0] = 255;
                 mask_p[1] = 255;
                 mask_p[2] = 255;
             }
+            else {
+                mask_p[0] = 0;
+                mask_p[1] = 0;
+                mask_p[2] = 0;
+            }
         }
     }
-    stbi_write_jpg("../data/duck2.jpg", width, height, channels, mask, 100);
+
+    stbi_write_jpg("../data/sorted-image.jpg", width, height, channels, mask, 100);
 }
