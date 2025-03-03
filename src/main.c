@@ -10,43 +10,86 @@ const int low_threshold = 127;
 const int high_threshold = 223;
 
 unsigned char getBrightness(unsigned char *pixel, int channels) {
-    if (channels == 1) return pixel[0]; // Grayscale
-    if (channels == 3 || channels == 4) {
-        return (pixel[0] + pixel[1] + pixel[2]) / 3; // RGB(A)
-    }
-    return 0;
+    if (channels == 1) return pixel[0];
+    unsigned char brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+    return brightness;
 }
 
 int comparePixels(const void *a, const void *b) {
     unsigned char *pixelA = (unsigned char *)a;
     unsigned char *pixelB = (unsigned char *)b;
-    
-    unsigned char brightnessA = get_brightness(pixelA, 3);
-    unsigned char brightnessB = get_brightness(pixelB, 3);
-    
+    unsigned char brightnessA = getBrightness(pixelA, 3);
+    unsigned char brightnessB = getBrightness(pixelB, 3);
     return brightnessA - brightnessB;
 }
 
-void sortInterval(unsigned char *img, int start_idx, int end_idx, int channels) {
-    int num_pixels = (end_idx - start_idx) + 1;
-
+void sortInterval(unsigned char *img, int start, int end, int channels) {
+    int num_pixels = (end - start) + 1;
     unsigned char *pixels = malloc(num_pixels * channels);
+    if (pixels == NULL) {
+        printf("Unable to allocate memory for the sorting algorithm.\n");
+        exit(1);
+    }
 
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < channels; c++) {
-            pixels[i * channels + c] = img[(start_idx + i) * channels + c];
+            pixels[i * channels + c] = img[(start + i) * channels + c];
         }
     }
 
-    qsort(pixels, num_pixels, channels * sizeof(unsigned char), comparePixels);
+    qsort(pixels, num_pixels, channels, comparePixels);
 
     for (int i = 0; i < num_pixels; i++) {
         for (int c = 0; c < channels; c++) {
-            img[(start_idx + i) * channels + c] = pixels[i * channels + c];
+            img[(start + i) * channels + c] = pixels[i * channels + c];
         }
     }
-    
+
     free(pixels);
+}
+
+void prepareMask(unsigned char *img, unsigned char *mask, int width, int height, int channels, int mode) {
+     if (mode == 0) {
+        for (int x = 0; x < width; x++) {
+        // interval start index
+        int start = -1;
+            for (int y = 0; y < height; y++) {
+                unsigned char *p = img + (channels * (y + x * height));
+                unsigned char *mask_p = mask + (y + x * height);
+
+                if (mask_p[0] == 255 && start == -1) {
+                    start = y + x * height;
+                }
+
+                if ((mask_p[0] != 255 || x == width - 1) && start != -1) {
+                    int end = mask_p[0] == 255 ? y + x * height : (y + x * height) - 1;
+                    sortInterval(img, start, end, channels);
+                    start = -1;
+                }
+            }
+        }
+    }
+
+    if (mode == 1) {
+        for (int y = 0; y < height; y++) {
+        // interval start index
+        int start = -1;
+            for (int x = 0; x < width; x++) {
+                unsigned char *p = img + (channels * (y * width + x));
+                unsigned char *mask_p = mask + (y * width + x);
+
+                if (mask_p[0] == 255 && start == -1) {
+                    start = y * width + x;
+                }
+
+                if ((mask_p[0] != 255 || x == width - 1) && start != -1) {
+                    int end = mask_p[0] == 255 ? y * width + x : (y * width + x) - 1;
+                    sortInterval(img, start, end, channels);
+                    start = -1;
+                }
+            }
+        }
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -75,13 +118,9 @@ int main(int argc, char *argv[]) {
     for (int j = 0; j < height; j++) {
         for (int i = 0; i < width; i++) {
             unsigned char *p = img + (channels * (j * width + i));
-            unsigned char *mask_p = mask + (channels * (j * width + i));
+            unsigned char *mask_p = mask + (j * width + i);
 
-            unsigned char r = p[0]; // red
-            unsigned char g = p[1]; // green 
-            unsigned char b = p[2]; // blue
-
-            unsigned char brightness = (r + g + b) / 3;
+            unsigned char brightness = getBrightness(p, channels);
 
             if (brightness > low_threshold && brightness < high_threshold) {
                 mask_p[0] = 255;
@@ -96,24 +135,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    int i = 0;
-    int j = 0;
-    while (i < width * height) {
-        unsigned char *p = img + (channels * (j * width + i));
-        unsigned char *mask_p = mask + (channels * (j * width + i));
+    prepareMask(img, mask, width, height, channels, 0);
+    prepareMask(img, mask, width, height, channels, 1);
 
-        unsigned char arr[width * height];
-        int aux = 0;
-
-        if (&mask_p == 255) {
-            arr[i] = aux++;
-            if (arr[i + 1] == 0) {
-                aux = 0;
-                i++;
-            }
-        }
-        j++;
-    }
-
-    stbi_write_jpg("../data/sorted-image.jpg", width, height, channels, mask, 100);
+    stbi_write_jpg("../data/sorted-image.jpg", width, height, channels, img, 100);
 }
